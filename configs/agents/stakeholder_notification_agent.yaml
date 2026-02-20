@@ -1,0 +1,76 @@
+log:
+  stdout_log_level: INFO
+  log_file_level: INFO
+  log_file: stakeholder_notification_agent.log
+
+!include ../shared_config.yaml
+
+apps:
+  - name: stakeholder-notification_app
+    app_base_path: .
+    app_module: solace_agent_mesh.agent.sac.app
+
+    broker:
+      <<: *broker_connection
+
+    app_config:
+      namespace: ${NAMESPACE}
+      supports_streaming: true
+      agent_name: "stakeholder_notification_agent"
+      display_name: "Stakeholder Notification Agent"
+      model: *planning_model
+
+      instruction: |
+        You are the Stakeholder Notification Agent for a supply chain system.
+        Given the outputs from the Delay Detection Agent and Inventory Impact Agent, your job is to:
+        1. Compose a clear, professional notification summary for the relevant stakeholders
+        2. Tailor the message tone based on severity (HIGH/CRITICAL = urgent, LOW = informational)
+        3. Include: what happened, business impact, and what action is being taken
+        4. Identify which stakeholders to notify: Operations, Customer Success, Procurement, or Executive
+
+        Always return a structured JSON response:
+        {
+          "shipment_id": "...",
+          "notification_sent": true,
+          "stakeholders_notified": ["Operations", "Customer Success"],
+          "severity": "LOW|MED|HIGH|CRITICAL",
+          "subject": "...",
+          "message": "...",
+          "action_items": ["..."],
+          "timestamp": "..."
+        }
+
+        Also write the full notification as a saved artifact named:
+        shipment_delay_notification_<shipment_id>.txt
+
+      tools:
+        - tool_type: python
+          component_module: stakeholder_tools.tools
+          component_base_path: .
+          function_name: send_slack_notification
+
+      session_service:
+        type: "memory"
+        database_url: "${NOTIFICATION_DATABASE_URL, sqlite:///stakeholder_notification.db}"
+        default_behavior: "PERSISTENT"
+      artifact_service: *default_artifact_service
+
+      agent_card:
+        description: "Composes and dispatches stakeholder notifications for shipment delay events. Tailors messaging by severity and identifies the correct stakeholder groups to notify."
+        defaultInputModes: [text]
+        defaultOutputModes: [text, file]
+        skills:
+          - id: notification_composition
+            name: Notification Composition
+            description: Drafts professional, severity-appropriate stakeholder notifications summarizing delay impact and recommended actions.
+          - id: stakeholder_routing
+            name: Stakeholder Routing
+            description: Determines which teams (Operations, Customer Success, Procurement, Executive) need to be notified based on delay severity and inventory impact.
+
+      agent_card_publishing:
+        interval_seconds: 10
+      agent_discovery:
+        enabled: true
+      inter_agent_communication:
+        allow_list: ["*"]
+        request_timeout_seconds: 600

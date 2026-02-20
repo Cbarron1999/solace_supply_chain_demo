@@ -1,0 +1,61 @@
+log:
+  stdout_log_level: INFO
+  log_file_level: INFO
+  log_file: delay_detection_agent.log
+
+!include ../shared_config.yaml
+
+apps:
+  - name: delay-detection_app
+    app_base_path: .
+    app_module: solace_agent_mesh.agent.sac.app
+
+    broker:
+      <<: *broker_connection
+
+    app_config:
+      namespace: ${NAMESPACE}
+      supports_streaming: true
+      agent_name: "delay_detection_agent"
+      display_name: "Delay Detection Agent"
+      model: *planning_model
+
+      instruction: |
+        You are the Delay Detection Agent.
+        Task: Given shipment delay details (old ETA, new ETA, must-arrive-by, customer tier),
+        compute delay_hours, classify severity (LOW/MED/HIGH), and return a JSON object only.
+        Severity rules:
+        - HIGH if delay_hours >= 12 OR new_eta is after must_arrive_by
+        - MED if delay_hours between 4 and 11
+        - LOW if delay_hours < 4
+        Output JSON schema:
+        {
+          "shipment_id": "...",
+          "delay_hours": 0,
+          "severity": "LOW|MED|HIGH",
+          "recommended_actions": ["..."],
+          "reasoning_short": "..."
+        }
+
+      session_service:
+        type: "memory"
+        database_url: "${DELAY_DETECTION_DATABASE_URL, sqlite:///delay_detection.db}"
+        default_behavior: "PERSISTENT"
+      artifact_service: *default_artifact_service
+
+      agent_card:
+        description: "Classifies shipment delay severity and normalizes ETA details."
+        defaultInputModes: [text]
+        defaultOutputModes: [text]
+        skills:
+          - id: delay_classification
+            name: Delay Classification
+            description: Analyzes shipment ETA changes, computes delay hours, and classifies severity as LOW, MED, or HIGH with recommended actions.
+
+      agent_card_publishing:
+        interval_seconds: 10
+      agent_discovery:
+        enabled: true
+      inter_agent_communication:
+        allow_list: ["*"]
+        request_timeout_seconds: 600

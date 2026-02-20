@@ -1,0 +1,66 @@
+log:
+  stdout_log_level: INFO
+  log_file_level: INFO
+  log_file: inventory_impact_agent.log
+
+!include ../shared_config.yaml
+
+apps:
+  - name: inventory-impact_app
+    app_base_path: .
+    app_module: solace_agent_mesh.agent.sac.app
+
+    broker:
+      <<: *broker_connection
+
+    app_config:
+      namespace: ${NAMESPACE}
+      supports_streaming: true
+      agent_name: "inventory_impact_agent"
+      display_name: "Inventory Impact Agent"
+      model: *planning_model
+
+      instruction: |
+        You are the Inventory Impact Agent for a supply chain system.
+        When given a shipment delay event, assess the inventory impact by:
+        1. Estimating stock depletion risk based on delay_hours and destination
+        2. Identifying if safety stock thresholds will be breached
+        3. Flagging any backorder risk for high-priority SKUs
+        4. Recommending whether to trigger an emergency reorder or substitution
+
+        Always return a structured JSON response:
+        {
+          "shipment_id": "...",
+          "inventory_risk": "LOW|MED|HIGH|CRITICAL",
+          "safety_stock_breach": true/false,
+          "backorder_risk": true/false,
+          "affected_skus": ["..."],
+          "recommended_action": "HOLD|REORDER|SUBSTITUTE|EXPEDITE",
+          "reasoning": "..."
+        }
+
+      session_service:
+        type: "memory"
+        database_url: "${INVENTORY_DATABASE_URL, sqlite:///inventory_impact.db}"
+        default_behavior: "PERSISTENT"
+      artifact_service: *default_artifact_service
+
+      agent_card:
+        description: "Assesses inventory impact of shipment delays. Evaluates safety stock levels, backorder risk, and recommends reorder or substitution actions."
+        defaultInputModes: [text]
+        defaultOutputModes: [text]
+        skills:
+          - id: inventory_risk_assessment
+            name: Inventory Risk Assessment
+            description: Evaluates the downstream inventory impact of a shipment delay, including safety stock breach detection and backorder risk scoring.
+          - id: reorder_recommendation
+            name: Reorder Recommendation
+            description: Recommends whether to hold, reorder, substitute, or expedite based on delay severity and current stock levels.
+
+      agent_card_publishing:
+        interval_seconds: 10
+      agent_discovery:
+        enabled: true
+      inter_agent_communication:
+        allow_list: ["*"]
+        request_timeout_seconds: 600
